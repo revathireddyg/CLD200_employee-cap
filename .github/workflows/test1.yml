@@ -1,68 +1,29 @@
-_schema-version: "3.3"
-ID: employee-details
-version: 1.0.0
+name: CAP CI
 
-parameters:
-  enable-parallel-deployments: true
+on:
+  push:
+    branches:
+      - main
 
-build-parameters:
-  before-all:
-    - builder: custom
-      commands:
-        - npm install
-        - npx cds build --production
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-modules:
+    steps:
+      - uses: actions/checkout@v4
 
-  - name: employee-details-srv
-    type: nodejs
-    path: gen/srv
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-    parameters:
-      memory: 512M
-      disk-quota: 512M
+      - name: Install dependencies
+        run: npm install
 
-    provides:
-      - name: srv-api
-        properties:
-          srv-url: ${default-url}
+      - name: Install CDS DK
+        run: npm install -g @sap/cds-dk
 
-    requires:
-      - name: employee-details-db
-      - name: employee-details-xsuaa
-      - name: employee-details-destination
+      - name: Build CAP project
+        run: cds build
 
-    build-parameters:
-      builder: npm-ci
-
-  - name: employee-details-db-deployer
-    type: hdb
-
-    path: gen/db
-
-    requires:
-      - name: employee-details-db
-
-resources:
-
-  - name: employee-details-db
-    type: com.sap.xs.hdi-container
-
-    parameters:
-      service: hana
-      service-plan: hdi-shared
-
-  - name: employee-details-xsuaa
-    type: org.cloudfoundry.managed-service
-
-    parameters:
-      service: xsuaa
-      service-plan: application
-      path: xs-security.json
-
-  - name: employee-details-destination
-    type: org.cloudfoundry.managed-service
-
-    parameters:
-      service: destination
-      service-plan: lite
+      - name: Verify model
+        run: cds compile srv/
