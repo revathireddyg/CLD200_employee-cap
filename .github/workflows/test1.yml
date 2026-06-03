@@ -1,4 +1,4 @@
-name: CAP CI
+name: SAP CAP CI/CD
 
 on:
   push:
@@ -6,24 +6,52 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm install
 
       - name: Install CDS DK
         run: npm install -g @sap/cds-dk
 
-      - name: Build CAP project
+      - name: Build CAP Project
         run: cds build
 
-      - name: Verify model
-        run: cds compile srv/
+      - name: Install MBT
+        run: npm install -g mbt
+
+      - name: Build MTAR
+        run: mbt build
+
+      - name: Install Cloud Foundry CLI
+        run: |
+          wget -O cf.tgz "https://packages.cloudfoundry.org/stable?release=linux64-binary"
+          tar -xzf cf.tgz
+          sudo mv cf /usr/local/bin/
+
+      - name: Login to Cloud Foundry
+        run: |
+          cf api ${{ secrets.CF_API }}
+          cf auth "${{ secrets.CF_USERNAME }}" "${{ secrets.CF_PASSWORD }}"
+          cf target -o "${{ secrets.CF_ORG }}" -s "${{ secrets.CF_SPACE }}"
+
+      - name: Install MultiApps Plugin
+        run: |
+          wget https://github.com/cloudfoundry/multiapps-cli-plugin/releases/latest/download/linux64-binary
+          chmod +x linux64-binary
+          cf install-plugin ./linux64-binary -f
+
+      - name: Deploy MTAR
+        run: |
+          cf deploy mta_archives/*.mtar -f
